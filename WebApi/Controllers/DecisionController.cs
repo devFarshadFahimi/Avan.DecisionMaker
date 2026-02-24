@@ -38,7 +38,6 @@ public record StageCreateDTO(string Name, byte Order, long GraphId, List<StageRu
 public record StageConnectionBoundsDTO(long FromStageId, long ToStageId);
 public record StageConnectionDTO(long GraphId, List<StageConnectionBoundsDTO> Bounds);
 
-
 [ApiController]
 [Route("api/[controller]/[action]")]
 public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbContext dbContext) : ControllerBase
@@ -59,6 +58,7 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         var connections = new List<StageConnection>();
 
 
+        #region For Insurance Scenario
         //graph.Connect("eligibilityCheck", "healthScore");
         //graph.Connect("healthScore", "riskFactors");
         //graph.Connect("riskFactors", "lifestyle");
@@ -71,20 +71,35 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
 
         //graph.Connect("combinedRiskEvaluation", "fraudCheck");
         //graph.Connect("fraudCheck", "finalApproval");
+        //var collection = new List<(long FromStageId, long ToStageId)>()
+        //{
+        //    new (1,2),
+        //    new (2,3),
+        //    new (3,4),
+        //    new (4,5),
+
+        //    new (3,6),
+        //    new (4,6),
+        //    new (5,6),
+
+        //    new (6,7),
+        //    new (7,8)
+        //}; 
+        #endregion
+
+        ////loan demo
+        //var collection = new List<(long FromStageId, long ToStageId)>()
+        //    {
+        //    new (10004,10005),
+        //    new (10005,10006),
+        //};
+
+
 
         var collection = new List<(long FromStageId, long ToStageId)>()
-        {
-            new (1,2),
-            new (2,3),
-            new (3,4),
-            new (4,5),
-
-            new (3,6),
-            new (4,6),
-            new (5,6),
-
-            new (6,7),
-            new (7,8)
+            {
+            new (10004,10005),
+            new (10005,10006),
         };
 
         foreach (var (FromStageId, ToStageId) in collection)
@@ -110,7 +125,7 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         if (graph == null) return NotFound();
         foreach (var stageCreateDTO in stages)
         {
-            var stage = new DecisionStage(stageCreateDTO.GraphId, stageCreateDTO.Name, stageCreateDTO.Order);
+            var stage = new DecisionStage(graphId, stageCreateDTO.Name, stageCreateDTO.Order);
             foreach (var item in stageCreateDTO.Rules)
             {
                 var stageRule = new DecisionRule(stage.Id, item.LogicalOperator, item.Priority);
@@ -172,8 +187,8 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         return Ok();
     }
 
-    [HttpGet("db-demo")]
-    public async Task<IActionResult> DbDemo()
+    [HttpGet("Insurance-Demo")]
+    public async Task<IActionResult> InsuranceDemo()
     {
         DecisionGraph? graph = await dbContext.DecisionGraphs
             .Include(p => p.DecisionGraphProps)
@@ -234,6 +249,59 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         }
 
         return Ok(results);
+    }
+
+    [HttpGet("LoanDemo")]
+    public async Task<IActionResult> LoanDemo()
+    {
+        DecisionGraph? graph = await dbContext.DecisionGraphs
+            .Include(p => p.DecisionGraphProps)
+            .Include(x => x.Stages)
+                .ThenInclude(s => s.OutgoingConnections)
+            .Include(p => p.Stages)
+            .ThenInclude(p => p.Rules)
+            .ThenInclude(p => p.Conditions)
+            .Include(p => p.Stages)
+            .ThenInclude(p => p.Rules)
+            .ThenInclude(p => p.Outputs)
+            .Where(p => p.Id == 2)
+            .FirstOrDefaultAsync();
+
+        ArgumentNullException.ThrowIfNull(graph);
+
+        LoanApprovalDecisionContext[] scenarios =
+        [
+            new(){
+                CreditScore = 780,
+                MonthlyIncome = 9000m,
+                ExistingDebt = 10000m,
+                EmploymentYears = 6,
+                HasLatePayments = false,
+                LoanAmount = 80000m
+            }
+        ];
+
+        var results = new List<object>();
+
+        foreach (var scenario in scenarios)
+        {
+            var context = DecisionContextBuilder.Build(scenario);
+
+            await decisionEngine.ExecuteAsync(graph, context);
+            results.Add(context.Snapshot());
+        }
+
+        return Ok(results);
+    }
+
+    public sealed class LoanApprovalDecisionContext
+    {
+        public int CreditScore { get; init; }
+        public decimal MonthlyIncome { get; init; }
+        public decimal ExistingDebt { get; init; }
+        public int EmploymentYears { get; init; }
+        public bool HasLatePayments { get; init; }
+        public decimal LoanAmount { get; init; }
     }
 
 }

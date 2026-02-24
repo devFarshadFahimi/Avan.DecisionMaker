@@ -6,6 +6,10 @@ namespace Application.Common.Utils;
 public sealed class DecisionContext
 {
     private readonly Dictionary<string, object?> _data = [];
+    public bool TryGet(string key, out object? value)
+    {
+        return _data.TryGetValue(key, out value);
+    }
 
     public void Set(string key, object? value)
         => _data[key] = value;
@@ -29,7 +33,29 @@ public sealed class DecisionContext
             _ => false
         };
     }
+    public void AppendToList(string key, string value)
+    {
+        if (!_data.TryGetValue(key, out var existing))
+        {
+            _data[key] = new List<string> { value };
+            return;
+        }
 
+        if (existing is List<string> list)
+        {
+            list.Add(value);
+            return;
+        }
+
+        if (existing is string single)
+        {
+            _data[key] = new List<string> { single, value };
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Property '{key}' is not compatible with List<string>.");
+    }
     //private static readonly Dictionary<string, Type> TypeMap = new()
     //{
     //    ["Int32"] = typeof(int),
