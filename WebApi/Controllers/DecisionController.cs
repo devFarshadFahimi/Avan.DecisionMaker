@@ -31,7 +31,7 @@ public record GraphCreateDTO(string Name, List<GraphPropDTO> GraphPropDTOs);
 public record StageOutputDTO(string Key, string? Value);
 public record StageConditionDTO(string Op, string Value, long PropId);
 public record StageRuleDTO(LogicalOperator LogicalOperator, byte Priority, List<StageConditionDTO> ConditionDTOs, List<StageOutputDTO> OutputDTOs);
-public record StageCreateDTO(string Name, byte Order, long GraphId, List<StageRuleDTO> Rules);
+public record StageCreateDTO(string Name, byte Order, long GraphId, StageType StageType, HitPolicyType HitPolicy, List<StageRuleDTO> Rules);
 
 
 
@@ -97,9 +97,11 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
 
 
         var collection = new List<(long FromStageId, long ToStageId)>()
-            {
-            new (10004,10005),
-            new (10005,10006),
+        {
+            new(20012,20013),
+            new(20013, 20014),
+            new(20013, 20015),
+            new(20013, 20016),
         };
 
         foreach (var (FromStageId, ToStageId) in collection)
@@ -125,7 +127,7 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         if (graph == null) return NotFound();
         foreach (var stageCreateDTO in stages)
         {
-            var stage = new DecisionStage(graphId, stageCreateDTO.Name, stageCreateDTO.Order);
+            var stage = new DecisionStage(graphId, stageCreateDTO.Name, stageCreateDTO.Order, stageCreateDTO.HitPolicy, stageCreateDTO.StageType);
             foreach (var item in stageCreateDTO.Rules)
             {
                 var stageRule = new DecisionRule(stage.Id, item.LogicalOperator, item.Priority);
@@ -292,6 +294,93 @@ public class DecisionController(IDecisionEngine decisionEngine, ApplicationDbCon
         }
 
         return Ok(results);
+    }
+
+    [HttpGet("SchoolDemo")]
+    public async Task<IActionResult> SchoolDemo()
+    {
+        DecisionGraph? graph = await dbContext.DecisionGraphs
+            .Include(p => p.DecisionGraphProps)
+            .Include(x => x.Stages)
+                .ThenInclude(s => s.OutgoingConnections)
+            .Include(p => p.Stages)
+            .ThenInclude(p => p.Rules)
+            .ThenInclude(p => p.Conditions)
+            .Include(p => p.Stages)
+            .ThenInclude(p => p.Rules)
+            .ThenInclude(p => p.Outputs)
+            .Where(p => p.Id == 10004)
+            .FirstOrDefaultAsync();
+
+        ArgumentNullException.ThrowIfNull(graph);
+
+        SchoolPlacementDecisionContext[] scenarios =
+        [
+             // 🥇 ممتاز → Advanced
+            new()
+            {
+                StudentAge = 10,
+                AverageScore = 95,
+                HasDisciplinaryRecord = false,
+            },
+
+            // 📘 عادی → Regular
+            new()
+            {
+                StudentAge = 8,
+                AverageScore = 75,
+                HasDisciplinaryRecord = false,
+            },
+
+            // 🚨 ممتاز با مشکل انضباطی → Advanced (چون هنوز Stage انضباطی نداریم)
+            new()
+            {
+                StudentAge = 12,
+                AverageScore = 92,
+                HasDisciplinaryRecord = true,
+            },
+
+            // ❌ سن کم ولی نمره خوب → همچنان مسیر placement اجرا می‌شود
+            new()
+            {
+                StudentAge = 5,
+                AverageScore = 85,
+                HasDisciplinaryRecord = true,
+            },
+
+            // 🔻 نمره پایین → هیچ Rule در placementDecision match نمی‌شود → Default → SpecialReview
+            new()
+            {
+                StudentAge = 9,
+                AverageScore = 50,
+                HasDisciplinaryRecord = false,
+            }
+        ];
+
+        var results = new List<object>();
+
+        foreach (var scenario in scenarios)
+        {
+            var context = DecisionContextBuilder.Build(scenario);
+
+            await decisionEngine.ExecuteAsync(graph, context);
+            results.Add(context.Snapshot());
+        }
+
+        return Ok(results);
+    }
+
+    public sealed class SchoolPlacementDecisionContext
+    {
+        public int StudentAge { get; init; }
+        public int AverageScore { get; init; }
+        public bool HasDisciplinaryRecord { get; init; }
+
+
+        // مقادیر خروجی که توسط Ruleها ست می‌شوند
+        public bool IsEligible { get; set; }
+        public string? PlacementResult { get; set; }
+        public string? FinalClass { get; set; }
     }
 
     public sealed class LoanApprovalDecisionContext

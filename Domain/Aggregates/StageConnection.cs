@@ -18,4 +18,7 @@ public sealed class StageConnection : BaseEntity
 
     public long ToStageId { get; private set; }
     public DecisionStage ToStage { get; private set; } = null!;
+
+    public long? DecisionRuleId { get; private set; }
+    public bool IsDefault { get; private set; }
 }

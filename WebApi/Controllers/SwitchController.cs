@@ -24,7 +24,7 @@ public class SwitchController(IDecisionEngine decisionEngine, ApplicationDbConte
                 graphId: graph.Id,
                 name: "RiskAssessmentSwitch",
                 priority: 2,
-                hitPolicy: HitPolicy.First,
+                hitPolicy: HitPolicyType.First,
                 stageType: StageType.Decision // یا StageType.Switch
             );
 
@@ -54,7 +54,7 @@ public class SwitchController(IDecisionEngine decisionEngine, ApplicationDbConte
                 graphId: graph.Id,
                 name: "DebtEvaluation",
                 priority: 3,
-                hitPolicy: HitPolicy.First,
+                hitPolicy: HitPolicyType.First,
                 stageType: StageType.Decision
             );
 
@@ -62,7 +62,7 @@ public class SwitchController(IDecisionEngine decisionEngine, ApplicationDbConte
                 graphId: graph.Id,
                 name: "ApprovalDecision",
                 priority: 4,
-                hitPolicy: HitPolicy.First,
+                hitPolicy: HitPolicyType.First,
                 stageType: StageType.Decision
             );
 
@@ -70,7 +70,7 @@ public class SwitchController(IDecisionEngine decisionEngine, ApplicationDbConte
                 graphId: graph.Id,
                 name: "MaxAmountCalculation",
                 priority: 5,
-                hitPolicy: HitPolicy.First,
+                hitPolicy: HitPolicyType.First,
                 stageType: StageType.Decision
             );
 

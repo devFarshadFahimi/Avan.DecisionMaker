@@ -5,7 +5,7 @@ public sealed class DecisionStage : BaseEntity
     private DecisionStage() { }
 
     public DecisionStage(long graphId, string name, byte priority
-        , HitPolicy hitPolicy = HitPolicy.First
+        , HitPolicyType hitPolicy = HitPolicyType.First
         , StageType stageType = StageType.Decision)
     {
         GraphId = graphId;
@@ -17,7 +17,7 @@ public sealed class DecisionStage : BaseEntity
 
     public long GraphId { get; private set; }
     public DecisionGraph Graph { get; private set; } = null!;
-    public HitPolicy HitPolicy { get; private set; } = HitPolicy.First;
+    public HitPolicyType HitPolicy { get; private set; }
     public StageType StageType { get; private set; }
 
     public string Name { get; private set; } = default!;
@@ -28,13 +28,21 @@ public sealed class DecisionStage : BaseEntity
     public ICollection<StageConnection> OutgoingConnections { get; set; } = [];
     public ICollection<StageConnection> IncomingConnections { get; set; } = [];
 
+    public void SetStageType(StageType stageType)
+    {
+        if (stageType == StageType.Switch && HitPolicy != HitPolicyType.First)
+        {
+            throw new InvalidDataException("In Switch stages, hit policy should be `First` only.");
+        }
+    }
+
     public void AddRule(DecisionRule stageRule)
     {
         Rules.Add(stageRule);
     }
 }
 
-public enum HitPolicy
+public enum HitPolicyType
 {
     First = 1,
     Collect = 2,

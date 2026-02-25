@@ -257,51 +257,139 @@ namespace Application.Common.Utils;
 
 public sealed class DecisionEngine : IDecisionEngine
 {
+    //public async Task ExecuteAsync(
+    //    DecisionGraph graph,
+    //    DecisionContext context,
+    //    CancellationToken cancellationToken = default)
+    //{
+    //    ArgumentNullException.ThrowIfNull(graph);
+    //    ArgumentNullException.ThrowIfNull(context);
+
+    //    var stages = graph.Stages.ToDictionary(x => x.Id);
+
+    //    var remainingDeps = stages.Values
+    //        .ToDictionary(
+    //            s => s.Id,
+    //            s => s.IncomingConnections.Count);
+
+    //    var readyQueue = new Queue<DecisionStage>(
+    //        stages.Values.Where(s => remainingDeps[s.Id] == 0));
+
+    //    var executedCount = 0;
+
+    //    while (readyQueue.Count > 0)
+    //    {
+    //        cancellationToken.ThrowIfCancellationRequested();
+
+    //        var stage = readyQueue.Dequeue();
+
+    //        ExecuteStageByHitPolicy(stage, context);
+
+    //        executedCount++;
+
+    //        foreach (var connection in stage.OutgoingConnections)
+    //        {
+    //            var targetId = connection.ToStageId;
+
+    //            remainingDeps[targetId]--;
+
+    //            if (remainingDeps[targetId] == 0)
+    //                readyQueue.Enqueue(stages[targetId]);
+    //        }
+    //    }
+
+    //    if (executedCount != stages.Count)
+    //        throw new InvalidOperationException("Graph contains cycle.");
+
+    //    await Task.CompletedTask;
+    //}
+
     public async Task ExecuteAsync(
-        DecisionGraph graph,
-        DecisionContext context,
-        CancellationToken cancellationToken = default)
+    DecisionGraph graph,
+    DecisionContext context,
+    CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(context);
 
         var stages = graph.Stages.ToDictionary(x => x.Id);
 
-        var remainingDeps = stages.Values
-            .ToDictionary(
-                s => s.Id,
-                s => s.IncomingConnections.Count);
+        var currentStage = stages.Values
+            .Single(s => s.IncomingConnections.Count == 0);
 
-        var readyQueue = new Queue<DecisionStage>(
-            stages.Values.Where(s => remainingDeps[s.Id] == 0));
-
-        var executedCount = 0;
-
-        while (readyQueue.Count > 0)
+        while (currentStage != null)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var stage = readyQueue.Dequeue();
+            var matchedRule = ExecuteStage(currentStage, context);
 
-            ExecuteStageByHitPolicy(stage, context);
+            var nextConnection = ResolveNextConnection(
+                currentStage,
+                matchedRule);
 
-            executedCount++;
+            if (nextConnection == null)
+                break;
 
-            foreach (var connection in stage.OutgoingConnections)
-            {
-                var targetId = connection.ToStageId;
-
-                remainingDeps[targetId]--;
-
-                if (remainingDeps[targetId] == 0)
-                    readyQueue.Enqueue(stages[targetId]);
-            }
+            currentStage = stages[nextConnection.ToStageId];
         }
 
-        if (executedCount != stages.Count)
-            throw new InvalidOperationException("Graph contains cycle.");
-
         await Task.CompletedTask;
+    }
+
+    private static DecisionRule? ExecuteStage(
+    DecisionStage stage,
+    DecisionContext context)
+    {
+        var orderedRules = stage.Rules
+            .OrderBy(r => r.Priority)
+            .ToList();
+
+        var matchedRules = orderedRules
+            .Where(context.EvaluateRule)
+            .ToList();
+
+        if (matchedRules.Count == 0)
+            return null;
+
+        switch (stage.HitPolicy)
+        {
+            case HitPolicyType.First:
+                ApplyFirst(matchedRules[0], context);
+                return matchedRules[0];
+
+            case HitPolicyType.Collect:
+                ApplyCollect(matchedRules, context);
+                return matchedRules.First();
+
+            default:
+                throw new NotSupportedException();
+        }
+    }
+    private static StageConnection? ResolveNextConnection(
+    DecisionStage stage,
+    DecisionRule? matchedRule)
+    {
+        // اگر Switch Stage باشد
+        if (stage.StageType == StageType.Switch)
+        {
+            // default path
+            if (matchedRule is null)
+            {
+                return stage.OutgoingConnections.FirstOrDefault(c => c.IsDefault);
+            }
+
+            // connection مرتبط با rule
+            var conditionalConnection = stage.OutgoingConnections
+                .FirstOrDefault(c =>
+                    c.DecisionRuleId == matchedRule?.Id);
+
+            if (conditionalConnection != null)
+                return conditionalConnection;
+
+        }
+
+        // Stage معمولی
+        return stage.OutgoingConnections.FirstOrDefault();
     }
 
     private static void ExecuteStageByHitPolicy(
@@ -322,11 +410,11 @@ public sealed class DecisionEngine : IDecisionEngine
 
         switch (stage.HitPolicy)
         {
-            case HitPolicy.First:
+            case HitPolicyType.First:
                 ApplyFirst(matchedRules[0], context);
                 break;
 
-            case HitPolicy.Collect:
+            case HitPolicyType.Collect:
                 ApplyCollect(matchedRules, context);
                 break;
 
